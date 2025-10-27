@@ -1,0 +1,11 @@
+@import "tailwindcss";
+
+.bg-avatar {
+  background-image: url("../src/assets/avatar.png");
+}
+.bg-tayyab-avatar {
+  background-image: url("../src/assets/tayyab_avatar.jpg");
+}
+.bg-tayyab-avatar-new {
+  background-image: url("../src/assets/tayyab_avatar_new.png");
+}
