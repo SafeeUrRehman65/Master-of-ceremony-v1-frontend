@@ -15,6 +15,9 @@ export default function MoC() {
   const audioContextRef = useRef(null);
   const sourceRef = useRef(null);
   const mediaSourceRef = useRef(null);
+  const playbackIntervalRef = useRef(null);
+  const audioPlayingRef = useRef(false);
+  const callAudioEndedRef = useRef(false);
   const isStartingStream = useRef(false);
   const sourceBufferRef = useRef(null);
   const [webSocket, setWebSocket] = useState(null);
@@ -43,6 +46,29 @@ export default function MoC() {
         try {
           ms.endOfStream();
           console.log("Stream ended safely!");
+
+          const audio_duration = audioRef.current.duration;
+          console.log("Audio duration is", audio_duration);
+          const interval = audio_duration * 1000;
+          console.log("Audio interval", interval);
+
+          if (audio_duration && isFinite(audio_duration)) {
+            clearTimeout(playbackIntervalRef.current);
+            playbackIntervalRef.current = setTimeout(() => {
+              console.log("Audio duration interval in action");
+              if (callAudioEndedRef.current) {
+                console.log("Audio ended already called, clearing interval");
+                callAudioEndedRef.current = false;
+              } else {
+                console.log(
+                  "Onended didn't fire so handling audio end manually!"
+                );
+                handleAudioEnd();
+                callAudioEndedRef.current = true;
+              }
+              console.log("Timeout cleared!");
+            }, interval);
+          }
         } catch (e) {
           console.warn("endOfStream failed:", e);
         }
@@ -58,16 +84,39 @@ export default function MoC() {
     isStartingStream.current = true;
 
     if (audioRef.current.src) {
-      URL.revokeObjectURL(audioRef.current.src);
-      audioRef.current.src = "";
+      const oldSrc = audioRef.current.src;
+      audioRef.current.onended = () => {
+        console.log("Old src ended, revoking...");
+        URL.revokeObjectURL(oldSrc);
+      };
     }
     console.log("making new sourceBuffer");
 
     const audio = audioRef.current;
 
+    callAudioEndedRef.current = false;
+    clearTimeout(playbackIntervalRef.current);
+    console.log(
+      "🔄 Reset callAudioEndedRef and cleared timeout for new playback"
+    );
+
     const mediaSource = new MediaSource();
     mediaSourceRef.current = mediaSource;
     audio.src = URL.createObjectURL(mediaSource);
+    console.log("New audio src made!");
+    audio.onended = null;
+    audio.onended = () => {
+      // only call if not called previously
+      if (!callAudioEndedRef.current) {
+        console.log("audio.onended fired!");
+        handleAudioEnd();
+        callAudioEndedRef.current = true;
+      } else {
+        callAudioEndedRef.current = false;
+      }
+    };
+
+    audioPlayingRef.current = false;
 
     mediaSourceRef.current.addEventListener(
       "sourceopen",
@@ -78,14 +127,12 @@ export default function MoC() {
         if (queue.length > 0 && !sourceBuffer.updating) {
           const nextChunk = queue.shift();
           sourceBuffer.appendBuffer(nextChunk);
-          console.log("Initial append from startNewStream:", nextChunk);
         }
 
         sourceBuffer.addEventListener("updateend", () => {
           if (queue.length > 0 && !sourceBuffer.updating) {
             const nextChunk = queue.shift();
             sourceBuffer.appendBuffer(nextChunk);
-            console.log("Drained from queue:", nextChunk);
           }
         });
       },
@@ -105,12 +152,11 @@ export default function MoC() {
     if (!sb.updating) {
       const nextChunk = queue.shift();
       sb.appendBuffer(nextChunk);
-      console.log("Appended from feedchunk", nextChunk);
     }
   };
 
   const handleAudioEnd = () => {
-    console.log("Frontend audio finished playback");
+    console.log("Frontend audio finished playback, sending flag to server!");
     if (
       websocketRef.current &&
       websocketRef.current.readyState === WebSocket.OPEN
@@ -131,143 +177,114 @@ export default function MoC() {
   }, []);
 
   useEffect(() => {
-    audioRef.current.crossOrigin = "anonymous";
+    const audio = audioRef.current;
+    if (!audio) return;
 
-    // audioRef.current.addEventListener("ended", () => {
-    //   handleAudioEnd();
-    // });
+    audio.crossOrigin = "anonymous";
 
-    audioRef.current.addEventListener("playing", () => {
-      console.log("Audio is playing now!");
-    });
-    audioRef.current.addEventListener("timeupdate", () => {
-      const a = audioRef.current;
-      if (a.currentTime >= a.duration && a.duration > 0) {
-        console.log("Reached end manually");
-      }
-    });
-
-    audioRef.current.addEventListener("canplay", () => {
+    const handleCanPlay = () => {
       console.log("Enough data loaded to play audio!");
       setShowWaveform(true);
+
+      audio.onplay = () => {
+        audioPlayingRef.current = true;
+      };
+
       audioRef.current
         .play()
         .then(() => {
-          const timeInterval = setInterval(() => {
-            if (!audioRef.current.paused && !audioRef.current.ended) {
-              return;
-            } else {
-              handleAudioEnd();
-              clearInterval(timeInterval);
-            }
-          }, 500);
+          console.log("Playback started");
         })
-        .catch((err) => {
-          console.warn("Autoplay blocked:", err);
-        });
-    });
+        .catch((err) => console.warn("Autoplay blocked:", err));
+    };
 
-    audioRef.current.addEventListener("error", (event) => {
-      handleAudioError(audioRef);
-    });
+    // Attach the canplay event
+    audio.addEventListener("canplay", handleCanPlay);
 
+    // Error handling
+    const handleAudioError = (event) => {
+      console.error("Audio error occurred:", event);
+    };
+    audio.addEventListener("error", handleAudioError);
+
+    // ---- WEBSOCKET SETUP ----
     const websocket = new WebSocket(`${import.meta.env.VITE_BACKEND_URL}`);
     websocketRef.current = websocket;
     setWebSocket(websocket);
 
-    websocketRef.current.onopen = () => {
-      console.log("Connection established with websocket successfully");
-    };
+    websocket.onopen = () => console.log("✅ WebSocket connected");
+    websocket.onerror = (error) => console.error("WebSocket error:", error);
+    websocket.onclose = (event) => console.warn("❌ WebSocket closed:", event);
 
-    websocketRef.current.onerror = (error) => {
-      console.error("Some error occured while connecting to websocket:", error);
-    };
-
-    websocketRef.current.onclose = (event) => {
-      console.warn("❌ WebSocket closed", event);
-    };
-
-    websocketRef.current.onmessage = async (event) => {
+    websocket.onmessage = async (event) => {
       const response_data = JSON.parse(event.data);
-      console.log("Data from backend", response_data);
-      const type = response_data.type;
-      switch (type) {
+      console.log("Data from backend:", response_data);
+
+      switch (response_data.type) {
         case "current_state":
-          const current_state_message = response_data.message;
-          if (current_state_message) {
-            setNotification(current_state_message);
-            if (response_data.phase === "listen") {
-              // enable the speech control button
-              setShowSpeechControl(true);
-              break;
-            } else if (response_data.phase == "remarks") {
-              setShowSpeechControl(false);
-              setLiveTranscription(null);
-              setCurrentSpeakerDetails(null);
-              break;
-            }
+          setNotification(response_data.message);
+          if (response_data.phase === "listen") setShowSpeechControl(true);
+          else if (response_data.phase === "remarks") {
+            setShowSpeechControl(false);
+            setLiveTranscription(null);
+            setCurrentSpeakerDetails(null);
           }
           break;
 
-        case "audio_chunk":
+        case "audio_chunk": {
           const base64data = response_data.audio_chunk;
-          // Convert base64 to ArrayBuffer
           const binaryString = atob(base64data);
           const bytes = new Uint8Array(binaryString.length);
           for (let i = 0; i < binaryString.length; i++) {
             bytes[i] = binaryString.charCodeAt(i);
           }
           feedChunk(bytes);
-
           break;
+        }
 
         case "audioFinished":
           console.log("Audio streaming finished");
+
           safeEndOfStream();
           break;
 
         case "ceremony_data":
-          if (!response_data) break;
           setCeremonyData(response_data);
           setShowCeremonyTable(true);
           break;
 
         case "speaker_details":
-          if (!response_data) break;
           setCurrentSpeakerDetails(response_data);
           break;
 
         case "transcription":
-          if (!response_data || !response_data.transcription) break;
-          const transcription = response_data.transcription;
-          setLiveTranscription(transcription);
+          setLiveTranscription(response_data.transcription);
           break;
 
-        // handle errors
         case "error":
-          if (!response_data) break;
           setErrorDetails(response_data);
           setShowErrorBox(true);
+          break;
       }
     };
 
+    // ✅ Proper cleanup
     return () => {
+      if (audioRef.current) {
+        audioRef.current.onended = null;
+        audioRef.current.onplay = null;
+        audioRef.current.pause();
+        audioRef.current.src = "";
+        audioRef.current.load();
+      }
+      audio.removeEventListener("error", handleAudioError);
+
       if (websocketRef.current) {
         websocketRef.current.close();
         websocketRef.current = null;
       }
-
-      if (audioRef.current) {
-        audioRef.current.onerror = null;
-        audioRef.current.pause();
-        // audioRef.current.removeEventListener("ended", handleAudioEnd);
-
-        audioRef.current.src = "";
-        audioRef.current.load();
-      }
     };
   }, []);
-
   const vad = useMicVAD({
     startOnLoad: false,
 
@@ -282,7 +299,6 @@ export default function MoC() {
       if (vad.userSpeaking) {
         // convert to pcm 16 audio chunks
         const pcm16chunk = float32ToPCM16(frame);
-        console.log("Pcm 16 chunk: ", pcm16chunk);
         if (pcm16chunk) {
           try {
             websocketRef.current.send(pcm16chunk);
@@ -322,15 +338,15 @@ export default function MoC() {
     }
   };
   return (
-    <div className="flex flex-col items-center gap-y-2 py-3">
+    <div className="flex flex-col w-screen h-screen  bg-linear-to-b from-purple-300 to-blue-700  items-center gap-y-2 py-3">
       <div className="flex p-4 justify-around w-full">
         <div className="title-box flex flex-col gap-y-2">
-          <p className="font-medium text-xl">Master of Ceremony</p>
+          <p className="font-medium text-2xl text-white">Master of Ceremony</p>
           {!ceremonyStarted ? (
             <button
               disabled={webSocket?.readyState !== 1}
               onClick={initiateCeremony}
-              className={`px-3 py-2 bg-blue-300 rounded-lg hover:bg-blue-400 ${
+              className={`px-3 py-2 text-white bg-blue-400 rounded-lg hover:bg-blue-500 ${
                 webSocket?.readyState === 1
                   ? "cursor-pointer"
                   : "cursor-not-allowed"
@@ -340,7 +356,7 @@ export default function MoC() {
             </button>
           ) : null}
         </div>
-        <div className="websocket-status-box w-max h-max p-4 border border-black/20 flex flex-col">
+        {/* <div className="websocket-status-box w-max h-max p-4 border border-black/20 flex flex-col">
           <p className="text-lg">
             <strong>WebSocket connection details</strong>
           </p>
@@ -356,7 +372,7 @@ export default function MoC() {
             <strong>Websocket URL: </strong>
             {websocketRef.current?.url ? websocketRef.current.url : "undefined"}
           </p>
-        </div>
+        </div> */}
       </div>
 
       {/* show the speech control button */}
@@ -400,3 +416,26 @@ export default function MoC() {
     </div>
   );
 }
+
+// audioRef.current.addEventListener("canplay", () => {
+//   console.log("Enough data loaded to play audio!");
+//   setShowWaveform(true);
+//   audioRef.current
+//     .play()
+//     .then(() => {
+//       const timeInterval = setInterval(() => {
+//         console.log("Time interval started");
+//         if (!audioRef.current.paused && !audioRef.current.ended) {
+//           console.log("Audio is still playing!");
+//           return;
+//         } else {
+//           console.log("Ending audio!");
+//           handleAudioEnd();
+//           clearInterval(timeInterval);
+//         }
+//       }, 500);
+//     })
+//     .catch((err) => {
+//       console.warn("Autoplay blocked:", err);
+//     });
+// });
