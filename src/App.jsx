@@ -7,6 +7,7 @@ import SpeechControl from "./components/SpeechControl";
 import ErrorBox from "./components/ErrorBox";
 import SpeakerModelBox from "./components/SpeakerModelBox";
 import CeremonyTable from "./components/CeremonyTable.jsx";
+import { speakerMap } from "./states/states.jsx";
 
 export default function MoC() {
   const vadRef = useRef(null);
@@ -19,10 +20,14 @@ export default function MoC() {
   const audioPlayingRef = useRef(false);
   const callAudioEndedRef = useRef(false);
   const isStartingStream = useRef(false);
+  const [selectedSpeaker, setSelectedSpeaker] = useState("Ken");
+
+  const [openSpeakerBox, setOpenSpeakerBox] = useState(false);
   const sourceBufferRef = useRef(null);
   const [webSocket, setWebSocket] = useState(null);
   const [notification, setNotification] = useState(" ");
   const [showWaveform, setShowWaveform] = useState(false);
+  const [script, setScript] = useState(null);
   const [showCeremonyTable, setShowCeremonyTable] = useState(false);
   const [ceremonyData, setCeremonyData] = useState(null);
   const [showSpeechControl, setShowSpeechControl] = useState(false);
@@ -64,6 +69,7 @@ export default function MoC() {
                   "Onended didn't fire so handling audio end manually!"
                 );
                 handleAudioEnd();
+                setScript(null);
                 callAudioEndedRef.current = true;
               }
               console.log("Timeout cleared!");
@@ -110,6 +116,7 @@ export default function MoC() {
       if (!callAudioEndedRef.current) {
         console.log("audio.onended fired!");
         handleAudioEnd();
+        setScript(null);
         callAudioEndedRef.current = true;
       } else {
         callAudioEndedRef.current = false;
@@ -230,6 +237,10 @@ export default function MoC() {
           }
           break;
 
+        case "script":
+          const script = response_data.content;
+          setScript(script);
+          break;
         case "audio_chunk": {
           const base64data = response_data.audio_chunk;
           const binaryString = atob(base64data);
@@ -327,6 +338,7 @@ export default function MoC() {
   const initiateCeremony = () => {
     const data = {
       phase: "initiate",
+      speaker: speakerMap[selectedSpeaker],
     };
     if (
       websocketRef.current &&
@@ -337,10 +349,14 @@ export default function MoC() {
     }
   };
   return (
-    <div className="flex flex-col w-screen min-h-screen h-max bg-linear-to-b from-purple-300 to-blue-700  items-center gap-y-2 py-3">
-      <div className="flex p-4 justify-around w-full">
+    <div className="flex flex-col w-screen min-h-screen h-max bg-white  items-center gap-y-2 py-3">
+      <div
+        className={`flex p-4 justify-around ${
+          openSpeakerBox ? "" : "items-center"
+        } w-full`}
+      >
         <div className="title-box flex flex-col gap-y-2">
-          <p className="font-medium text-2xl text-white">Master of Ceremony</p>
+          <p className="font-medium text-2xl">Master of Ceremony</p>
           {!ceremonyStarted ? (
             <button
               disabled={webSocket?.readyState !== 1}
@@ -354,6 +370,49 @@ export default function MoC() {
               Start ceremony
             </button>
           ) : null}
+        </div>
+        <div className="relative flex flex-col gap-y-2">
+          <div className={`${ceremonyStarted ? "hidden" : ""}`}>
+            <div className="label text-xs absolute left-1 -top-2.5 px-2 bg-white tracking-tight">
+              Speaker
+            </div>
+            <div
+              onClick={() => {
+                setOpenSpeakerBox((prev) => !prev);
+              }}
+              className={`select-box`}
+            >
+              <div className="flex w-48 h-8 items-center rounded-lg border border-black/20 px-2 cursor-pointer">
+                <p>{selectedSpeaker}</p>
+                <span className="ml-auto material-symbols-outlined">
+                  arrow_drop_down
+                </span>
+              </div>
+            </div>
+          </div>
+          <div
+            className={`${
+              openSpeakerBox ? "" : "hidden"
+            }  options-box w-48 rounded-lg border border-black/20 overflow-clip`}
+          >
+            <Options
+              optionsList={[
+                "Ken",
+                "Natalie",
+                "Charles",
+                "Hazel",
+                "Ruby",
+                "Terell",
+                "Miles",
+                "Jim",
+                "Freddie",
+                "Riley",
+                "Wayne",
+              ]}
+              setSelectedSpeaker={setSelectedSpeaker}
+              setOpenSpeakerBox={setOpenSpeakerBox}
+            />
+          </div>
         </div>
         {/* <div className="websocket-status-box w-max h-max p-4 border border-black/20 flex flex-col">
           <p className="text-lg">
@@ -392,13 +451,20 @@ export default function MoC() {
           audioContextRef={audioContextRef}
         />
       ) : null}
-
-      {currentSpeakerDetails || liveTranscription ? (
-        <SpeakerModelBox
-          speaker_details={currentSpeakerDetails}
-          live_transcription={liveTranscription}
-        />
-      ) : null}
+      <div className="flex gap-x-4 mt-4">
+        {currentSpeakerDetails || liveTranscription ? (
+          <SpeakerModelBox
+            speaker_details={currentSpeakerDetails}
+            live_transcription={liveTranscription}
+          />
+        ) : null}
+        {script && (
+          <div className="h-max p-3 border border-black/10">
+            <strong>Tayyib</strong>
+            <p>{script}</p>
+          </div>
+        )}
+      </div>
 
       {showErrorBox ? (
         <ErrorBox
@@ -407,9 +473,9 @@ export default function MoC() {
         />
       ) : null}
 
-      {showCeremonyTable ? (
+      {/* {showCeremonyTable ? (
         <CeremonyTable ceremony_data={ceremonyData} />
-      ) : null}
+      ) : null} */}
 
       <audio className="hidden" ref={audioRef} controls></audio>
     </div>
@@ -438,3 +504,35 @@ export default function MoC() {
 //       console.warn("Autoplay blocked:", err);
 //     });
 // });
+
+const Options = ({ setSelectedSpeaker, optionsList, setOpenSpeakerBox }) => {
+  const boxRef = useRef(null);
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (boxRef.current && !boxRef.current.contains(e.target)) {
+        setOpenSpeakerBox(false);
+      }
+    };
+
+    document.addEventListener("mousedown", handleClickOutside);
+
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [setOpenSpeakerBox]);
+  return (
+    <div ref={boxRef}>
+      {optionsList?.map((option, index) => (
+        <div
+          onClick={(e) => {
+            setSelectedSpeaker(option);
+            setOpenSpeakerBox(false);
+          }}
+          key={index}
+          className="flex option cursor-pointer py-1 px-2 hover:bg-black/10"
+        >
+          <p className="text-sm">{option}</p>
+          <span className="ml-auto material-symbols-outlined">language_us</span>
+        </div>
+      ))}
+    </div>
+  );
+};

@@ -88,7 +88,7 @@ const AudioVisualizer = ({ sourceRef, audioContextRef }) => {
   }, []);
 
   return (
-    <div className="relative w-[300px] h-[300px] flex items-center justify-center">
+    <div className="relative w-[300px] h-[300px] flex flex-col gap-y-4 items-center justify-center">
       {/* ⚠️ Important: do NOT stretch canvas */}
       <canvas
         ref={canvasRef}
