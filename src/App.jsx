@@ -164,7 +164,6 @@ export default function MoC() {
       websocketRef.current?.send(JSON.stringify({ audioFinished: true }));
     }
     setShowWaveform(false);
-    safeEndOfStream();
     sourceBufferRef.current = null;
     mediaSourceRef.current = null;
   };
@@ -338,7 +337,7 @@ export default function MoC() {
     }
   };
   return (
-    <div className="flex flex-col w-screen h-screen  bg-linear-to-b from-purple-300 to-blue-700  items-center gap-y-2 py-3">
+    <div className="flex flex-col w-screen min-h-screen h-max bg-linear-to-b from-purple-300 to-blue-700  items-center gap-y-2 py-3">
       <div className="flex p-4 justify-around w-full">
         <div className="title-box flex flex-col gap-y-2">
           <p className="font-medium text-2xl text-white">Master of Ceremony</p>
