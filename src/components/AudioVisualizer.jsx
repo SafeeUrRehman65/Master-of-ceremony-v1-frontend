@@ -1,11 +1,27 @@
-import React, { useEffect, useRef } from "react";
+import React, { useEffect, useRef, useState } from "react";
+import { analogousColorGroups } from "../states/states";
+import { easeInOut, motion } from "framer-motion"
 
 const AudioVisualizer = ({ sourceRef, audioContextRef }) => {
   const canvasRef = useRef(null);
   const animationRef = useRef(null);
   const analyserRef = useRef(null);
   const dataArray = useRef();
+  const [analogGroup, setAnalogGroup] = useState({ group: ["#D826D9", "#D92680", "#D92627"] })
 
+
+  useEffect(()=>{
+    let count = 0
+    const timeInterval = setInterval(() => {
+      count = (count + 1) % analogousColorGroups.length
+      setAnalogGroup(analogousColorGroups[count])
+      count += 1
+    }, 400);
+
+    return()=>{
+      clearInterval(timeInterval)
+    }
+  },[])
   useEffect(() => {
     if (!sourceRef.current || !audioContextRef.current) {
       console.log("sourceRef or audioContextRef not defined");
@@ -88,16 +104,34 @@ const AudioVisualizer = ({ sourceRef, audioContextRef }) => {
   }, []);
 
   return (
-    <div className="relative w-[300px] h-[300px] flex flex-col gap-y-4 items-center justify-center">
+    <div className="relative flex flex-col gap-y-4 items-center justify-center">
       {/* ⚠️ Important: do NOT stretch canvas */}
-      <canvas
+      {/* <canvas
         ref={canvasRef}
         width={300}
         height={300}
         style={{ width: "300px", height: "300px" }}
         className="absolute top-0 left-0 rounded-full"
+      /> */}
+      {/* <div className="w-[240px] h-[240px] bg-tayyab-avatar-new bg-cover rounded-full z-10 bg-black/70"></div> */}
+      <motion.div
+        className="z-10 w-[16rem] h-[16rem] bg-linear-to-b from-white/20 to-white/30 backdrop-blur-md border border-white/50 rounded-full"></motion.div>
+      <motion.div
+        style={{
+          "--c1": analogGroup.group[0],
+          "--c2": analogGroup.group[1],
+          "--c3": analogGroup.group[2],
+          background: "linear-gradient(135deg, var(--c1), var(--c2), var(--c3))",
+        }}
+        animate={{
+          "--c1": analogGroup.group[0],
+          "--c2": analogGroup.group[1],
+          "--c3": analogGroup.group[2], rotate:360
+        }}
+        transition={{duration:0.4, ease:easeInOut,repeat:Infinity}}
+        className="absolute w-[14rem] h-[14rem] blur-sm border border-white/10 rounded-full"
       />
-      <div className="w-[240px] h-[240px] bg-tayyab-avatar-new bg-cover rounded-full z-10 bg-black/70"></div>
+
       <div className="absolute bottom-[-40px] text-center font-semibold text-md">
         <p>Tayyib Speaking</p>
       </div>

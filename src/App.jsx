@@ -6,7 +6,7 @@ import AudioVisualizer from "./components/AudioVisualizer";
 import SpeechControl from "./components/SpeechControl";
 import ErrorBox from "./components/ErrorBox";
 import SpeakerModelBox from "./components/SpeakerModelBox";
-import CeremonyTable from "./components/CeremonyTable.jsx";
+import {easeInOut, motion} from "framer-motion"
 import { speakerMap } from "./states/states.jsx";
 
 export default function MoC() {
@@ -59,21 +59,21 @@ export default function MoC() {
 
           if (audio_duration && isFinite(audio_duration)) {
             clearTimeout(playbackIntervalRef.current);
-            playbackIntervalRef.current = setTimeout(() => {
-              console.log("Audio duration interval in action");
-              if (callAudioEndedRef.current) {
-                console.log("Audio ended already called, clearing interval");
-                callAudioEndedRef.current = false;
-              } else {
-                console.log(
-                  "Onended didn't fire so handling audio end manually!"
-                );
-                handleAudioEnd();
-                setScript(null);
-                callAudioEndedRef.current = true;
-              }
-              console.log("Timeout cleared!");
-            }, interval);
+            // playbackIntervalRef.current = setTimeout(() => {
+            //   console.log("Audio duration interval in action");
+            //   if (callAudioEndedRef.current) {
+            //     console.log("Audio ended already called, clearing interval");
+            //     callAudioEndedRef.current = false;
+            //   } else {
+            //     console.log(
+            //       "Onended didn't fire so handling audio end manually!"
+            //     );
+            //     handleAudioEnd();
+            //     setScript(null);
+            //     callAudioEndedRef.current = true;
+            //   }
+            //   console.log("Timeout cleared!");
+            // }, interval);
           }
         } catch (e) {
           console.warn("endOfStream failed:", e);
@@ -349,7 +349,7 @@ export default function MoC() {
     }
   };
   return (
-    <div className="flex flex-col w-screen min-h-screen h-max bg-white  items-center gap-y-2 py-3">
+    <div className="flex flex-col w-screen min-h-screen h-max items-center gap-y-2 py-3">
       <div
         className={`flex p-4 justify-around ${
           openSpeakerBox ? "" : "items-center"
@@ -373,7 +373,7 @@ export default function MoC() {
         </div>
         <div className="relative flex flex-col gap-y-2">
           <div className={`${ceremonyStarted ? "hidden" : ""}`}>
-            <div className="label text-xs absolute left-1 -top-2.5 px-2 bg-white tracking-tight">
+            <div className="label text-xs absolute left-1 -top-2.5 px-2 tracking-tight bg-white">
               Speaker
             </div>
             <div
@@ -384,16 +384,19 @@ export default function MoC() {
             >
               <div className="flex w-48 h-8 items-center rounded-lg border border-black/20 px-2 cursor-pointer">
                 <p>{selectedSpeaker}</p>
-                <span className="ml-auto material-symbols-outlined">
+                <span className="ml-auto text-black material-symbols-outlined">
                   arrow_drop_down
                 </span>
               </div>
             </div>
           </div>
-          <div
+          <motion.div
+          initial={{opacity:0}}
+          animate={{opacity:1}}
+          transition={{duration:0.25, ease:easeInOut}}
             className={`${
               openSpeakerBox ? "" : "hidden"
-            }  options-box w-48 rounded-lg border border-black/20 overflow-clip`}
+            }  options-box w-48 z-20 rounded-lg relative overflow-x-clip`}
           >
             <Options
               optionsList={[
@@ -412,7 +415,7 @@ export default function MoC() {
               setSelectedSpeaker={setSelectedSpeaker}
               setOpenSpeakerBox={setOpenSpeakerBox}
             />
-          </div>
+          </motion.div>
         </div>
         {/* <div className="websocket-status-box w-max h-max p-4 border border-black/20 flex flex-col">
           <p className="text-lg">
@@ -445,12 +448,12 @@ export default function MoC() {
       ) : null}
 
       <p className="font-medium text-xl">{notification}</p>
-      {showWaveform ? (
+      {/* {showWaveform ? ( */}
         <AudioVisualizer
           sourceRef={sourceRef}
           audioContextRef={audioContextRef}
         />
-      ) : null}
+      {/* ) : null} */}
       <div className="flex gap-x-4 mt-4">
         {currentSpeakerDetails || liveTranscription ? (
           <SpeakerModelBox
@@ -519,7 +522,7 @@ const Options = ({ setSelectedSpeaker, optionsList, setOpenSpeakerBox }) => {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [setOpenSpeakerBox]);
   return (
-    <div ref={boxRef}>
+    <div className="absolute bg-white w-full border border-black/10 rounded-md" ref={boxRef}>
       {optionsList?.map((option, index) => (
         <div
           onClick={(e) => {
