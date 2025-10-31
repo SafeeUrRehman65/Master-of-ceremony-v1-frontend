@@ -214,7 +214,7 @@ export default function MoC() {
     audio.addEventListener("error", handleAudioError);
 
     // ---- WEBSOCKET SETUP ----
-    const websocket = new WebSocket(`${import.meta.env.VITE_BACKEND_URL}`);
+    const websocket = new WebSocket(`${import.meta.env.VITE_BACKEND_WEBSOCKET_URL}`);
     websocketRef.current = websocket;
     setWebSocket(websocket);
 
